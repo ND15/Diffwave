@@ -1,7 +1,11 @@
 import math
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from layers import DiffEmbedding, SpectrogramUpsampler, ResidualBlock
+from params import Params
 
 
 class DiffWave(nn.Module):
@@ -32,7 +36,7 @@ class DiffWave(nn.Module):
         nn.init.zeros_(self.output_projection.weight)
 
     def forward(self, inputs, diffusion_step, condition=None):
-        x = inputs.unsqueeze(-1)
+        x = inputs.unsqueeze(1)
         x = self.input_projection(x)
         x = F.relu(x)
 
@@ -51,3 +55,11 @@ class DiffWave(nn.Module):
         x = F.relu(x)
         x = self.output_projection(x)
         return x
+
+
+if __name__ == "__main__":
+    params = Params()
+    model = DiffWave(params)
+    x = torch.randn((4, 160000))
+
+    print(model(x, torch.tensor(10)).shape)
