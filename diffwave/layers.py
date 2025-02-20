@@ -1,10 +1,6 @@
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import matplotlib.pyplot as plt
 
 
 class DiffEmbedding(nn.Module):
@@ -34,7 +30,7 @@ class DiffEmbedding(nn.Module):
 
     def _lerp_embedding(self, time_step):
         """
-        This embedding is for the fast sampling, where t can be float.
+        This embedding is for the fast sampling, where t can be a float.
         """
         low_idx = torch.floor(time_step).long()
         high_idx = torch.ceil(time_step).long()
@@ -51,7 +47,7 @@ class DiffEmbedding(nn.Module):
         return embedding_matrix
 
     def _build_relative_embeddings(self):
-        embedding_matrix = torch.randn((self.max_steps, 64))
+        # embedding_matrix = torch.ra\ndn((self.max_steps, 64))
         pass
 
 
