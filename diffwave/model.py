@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from layers import DiffEmbedding, SpectrogramUpsampler, ResidualBlock
-from params import Params
+from utilities.params import Params
 
 
 class DiffWave(nn.Module):
