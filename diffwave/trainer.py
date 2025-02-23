@@ -9,7 +9,6 @@ import torch.nn as nn
 from torch import Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 from model import DiffWave
 from sampler.ddpm import DDPMSampler
 from utilities.dataset import UnconditionalAudioDataset
@@ -36,6 +35,7 @@ class DiffWaveTrainer:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # TODO tune this for mixed precision training
+        self.scaler = torch.cuda.amp.GradScaler()
         self.step = 0
         betas = torch.tensor(self.params.noise_schedule)
         alphas = 1.0 - betas
@@ -65,12 +65,16 @@ class DiffWaveTrainer:
                        audio + self.sqrt_one_minus_alphas_cum_prod.gather(dim=-1, index=t).reshape(
                     noise.shape[0], 1) * noise)
 
-        predicted = self.model(noisy_audio, t, condition)
-        loss = self.loss_fn(noise, predicted.squeeze(1))
+        with torch.cuda.amp.autocast():
+            predicted = self.model(noisy_audio, t, condition)
+            loss = self.loss_fn(noise, predicted.squeeze(1))
 
-        loss.backward()
+        self.scaler.scale(loss).backward()
 
-        self.optimizer.step()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
 
         return loss
 
@@ -86,36 +90,37 @@ class DiffWaveTrainer:
 
                 loss = self.train_step(audio=audio, condition=condition)
                 epoch_loss += loss.detach().cpu()
-                if (i + 1) % 100 == 0:
+                if (i + 1) % 200 == 0:
                     print(f"Epoch {epoch + 1:03d} | Loss: {epoch_loss / i:.4f}")
-                    samples = self.sampler.sampling(n_samples=10)
-                    for j, sample in enumerate(samples):
-                        if not os.path.exists(self.model_dir + f"/epoch_{i + 1}_iter_{i}"):
-                            os.makedirs(self.model_dir + f"/epoch_{i + 1}_iter_{i}")
-
-                        soundfile.write(f"{self.model_dir}/epoch_{i + 1}_iter_{i}/sample_{j}.wav",
-                                        data=sample.detach().cpu().numpy(),
-                                        samplerate=16000)
+                    # samples = self.sampler.sampling(n_samples=10)
+                    # for j, sample in enumerate(samples):
+                    #     if not os.path.exists(self.model_dir + f"/epoch_{epoch + 1}_iter_{i}"):
+                    #         os.makedirs(self.model_dir + f"/epoch_{epoch + 1}_iter_{i}")
+                    #
+                    #     soundfile.write(f"{self.model_dir}/epoch_{epoch + 1}_iter_{i}/sample_{j}.wav",
+                    #                     data=sample.detach().cpu().numpy(),
+                    #                     samplerate=16000)
 
             avg_loss = epoch_loss / len(self.dataset)
             print(f"Epoch {epoch + 1:03d} | Loss: {avg_loss:.4f}")
-            samples = self.sampler.sampling(n_samples=10)
-            for j, sample in enumerate(samples):
-                if not os.path.exists(self.model_dir + f"/epoch_{epoch + 1}"):
-                    os.makedirs(self.model_dir + f"/epoch_{epoch + 1}")
+            if (epoch + 1) % 30 == 0:
+                samples = self.sampler.sampling(n_samples=10)
+                for j, sample in enumerate(samples):
+                    if not os.path.exists(self.model_dir + f"/epoch_{epoch + 1}"):
+                        os.makedirs(self.model_dir + f"/epoch_{epoch + 1}")
 
-                soundfile.write(f"{self.model_dir}/epoch_{epoch + 1}/sample_{j}.wav",
-                                data=sample.detach().cpu().numpy(),
-                                samplerate=16000)
+                    soundfile.write(f"{self.model_dir}/epoch_{epoch + 1}/sample_{j}.wav",
+                                    data=sample.detach().cpu().numpy(),
+                                    samplerate=16000)
 
 
 if __name__ == "__main__":
     params = Params()
     audio_dataset = UnconditionalAudioDataset("../../../../../Data/audio/audio/", num_segments=3)
-    dataloader = DataLoader(audio_dataset, batch_size=4, shuffle=True)
+    dataloader = DataLoader(audio_dataset, batch_size=8, shuffle=True)
     model = DiffWave(params=params).to(device="cuda")
     sampler = DDPMSampler(model=model, params=params)
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
     trainer = DiffWaveTrainer(model=model,
                               sampler=sampler,
                               dataset=dataloader,
