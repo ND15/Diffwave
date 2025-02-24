@@ -71,10 +71,10 @@ class DDPMSampler(nn.Module):
     def sampling(self, n_samples, conditions=None):
         x_t = torch.randn((n_samples, self.params.audio_len), dtype=torch.float32).to(self.device)  # Ensure float32
 
-        for i in tqdm(range(self.params.time_steps)):
+        for i in tqdm(range(self.params.time_steps - 1, -1, -1), desc="Sampling"):
             t = torch.tensor([i for _ in range(n_samples)], dtype=torch.long).to(self.device)
             x_t = self.sample_one_step(x_t=x_t, time_step=t, condition=conditions)
 
-        x_t = (x_t + 1.) / 2.
+        # x_t = (x_t + 1.) / 2.
 
         return x_t
