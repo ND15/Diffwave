@@ -82,8 +82,8 @@ class ResidualBlock(nn.Module):
         else:
             self.conditioner_projection = None
 
-        self.output_projection = nn.Conv1d(2 * residual_channels, residual_channels, kernel_size=1)
-        self.skip_projection = nn.Conv1d(2 * residual_channels, residual_channels, kernel_size=1)
+        self.output_projection = nn.Conv1d(residual_channels, residual_channels, kernel_size=1)
+        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, kernel_size=1)
 
     def forward(self, x, diffusion_step, conditioner=None):
         # assertion
@@ -97,11 +97,12 @@ class ResidualBlock(nn.Module):
             conditioner = self.conditioner_projection(conditioner)
             y = self.dilated_conv(y) + conditioner
 
-        gate = torch.sigmoid(y) * torch.tanh(y)
+        tan, sig = torch.chunk(y, 2, dim=1)
+        y = torch.tanh(tan) * torch.sigmoid(sig)
 
-        y = self.output_projection(gate)
+        y = self.output_projection(y)
 
-        skip = self.skip_projection(gate)
+        skip = self.skip_projection(y)
 
         return y, skip
 
